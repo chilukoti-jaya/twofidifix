@@ -1,0 +1,109 @@
+import pandas as pd
+import numpy as np
+
+def compare_dataframes(df1, df2, id_column1='empid', login_column1='devloginname', 
+                       id_column2='id', login_column2='uatloginname'):
+    """
+    Robustly compare two DataFrames based on id and login name matching.
+    
+    Parameters:
+    df1 (pd.DataFrame): First DataFrame
+    df2 (pd.DataFrame): Second DataFrame
+    id_column1 (str): ID column name in first DataFrame
+    login_column1 (str): Login column name in first DataFrame
+    id_column2 (str): ID column name in second DataFrame
+    login_column2 (str): Login column name in second DataFrame
+    
+    Returns:
+    tuple: 
+    - matched_records (DataFrame): Records that match in both DataFrames
+    - unmatched_df1 (DataFrame): Records from df1 that don't have a match
+    - unmatched_df2 (DataFrame): Records from df2 that don't have a match
+    """
+    # Validate input columns exist
+    for col, df in [(id_column1, df1), (login_column1, df1), 
+                    (id_column2, df2), (login_column2, df2)]:
+        if col not in df.columns:
+            raise KeyError(f"Column '{col}' not found in DataFrame")
+    
+    # Create copies to avoid modifying original DataFrames
+    df1_copy = df1.copy()
+    df2_copy = df2.copy()
+    
+    # Rename columns for consistent comparison
+    df1_copy = df1_copy.rename(columns={
+        id_column1: 'comparison_id', 
+        login_column1: 'comparison_login'
+    })
+    
+    df2_copy = df2_copy.rename(columns={
+        id_column2: 'comparison_id', 
+        login_column2: 'comparison_login'
+    })
+    
+    # Merge DataFrames
+    merged_df = pd.merge(
+        df1_copy, 
+        df2_copy, 
+        on=['comparison_id', 'comparison_login'], 
+        how='outer', 
+        indicator=True
+    )
+    
+    # Separate matched and unmatched records
+    matched_records = merged_df[merged_df['_merge'] == 'both']
+    unmatched_df1 = merged_df[merged_df['_merge'] == 'left_only']
+    unmatched_df2 = merged_df[merged_df['_merge'] == 'right_only']
+    
+    # Remove merge indicator and rename columns back
+    def clean_dataframe(df, original_df, id_col, login_col):
+        # Drop merge column and comparison columns
+        cleaned_df = df.drop(columns=['_merge', 'comparison_id', 'comparison_login'])
+        
+        # Ensure all original columns are present
+        for col in original_df.columns:
+            if col not in cleaned_df.columns:
+                cleaned_df[col] = np.nan
+        
+        # Reorder columns to match original DataFrame
+        return cleaned_df[original_df.columns]
+    
+    matched = clean_dataframe(matched_records, df1, id_column1, login_column1)
+    unmatched1 = clean_dataframe(unmatched_df1, df1, id_column1, login_column1)
+    unmatched2 = clean_dataframe(unmatched_df2, df2, id_column2, login_column2)
+    
+    return matched, unmatched1, unmatched2
+
+# Example usage with error handling
+def main():
+    try:
+        # Sample DataFrames
+        df1 = pd.DataFrame({
+            'empid': [1, 2, 3, 4],
+            'devloginname': ['john', 'jane', 'mike', 'sara'],
+            'appname': ['app1', 'app2', 'app3', 'app4']
+        })
+        
+        df2 = pd.DataFrame({
+            'id': [1, 2, 5, 6],
+            'uatloginname': ['john', 'jane', 'tom', 'lisa'],
+            'idtype': ['type1', 'type2', 'type3', 'type4']
+        })
+        
+        # Perform comparison
+        matched, unmatched_1, unmatched_2 = compare_dataframes(df1, df2)
+        
+        print("Matched Records:")
+        print(matched)
+        print("\nUnmatched Records from First DataFrame:")
+        print(unmatched_1)
+        print("\nUnmatched Records from Second DataFrame:")
+        print(unmatched_2)
+    
+    except KeyError as e:
+        print(f"Error: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+# Uncomment to run
+# main()
